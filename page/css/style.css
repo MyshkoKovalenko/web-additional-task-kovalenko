@@ -1,0 +1,29 @@
+* {
+    margin: 0;
+    padding: 0;
+
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.container {
+    background-color: #f1f1f1;
+
+    width: 100vw;
+    height: 100vh;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.greet-card {
+    background-color: white;
+
+    width: 800px;
+    height: 500px;
+    box-sizing: border-box;
+
+    padding: 40px;
+
+    box-shadow: 0 0 50px -20px gray;
+}
