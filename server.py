@@ -1,7 +1,12 @@
 import socket
 import sys
+import os
+
+if not os.path.exists("data/"):
+    os.mkdir("data/")
 
 USAGE = "Usage: python server.py [host] [port]"
+LOG_PATH = "data/logs.txt"
 
 def throw_usage_error(message):
     print(message)
@@ -20,10 +25,6 @@ def validate_args(host, port):
         throw_usage_error("Not a valid IP.")
     if not (port.isnumeric() and int(port) >= 0 and int(port) < 0xffff):
         throw_usage_error("Not a valid port.")
-
-
-HEADERS_HTML = "HTTP/1.0 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n"
-HEADERS_CSS = "HTTP/1.0 200 OK\r\nContent-Type: text/css; charset=utf-8\r\nConnection: close\r\n"
 
 def open_socket(host, port):
     for res in socket.getaddrinfo(host, port, socket.AF_UNSPEC,
@@ -47,19 +48,13 @@ def open_socket(host, port):
         sys.exit(1)
     return s
 
-def send_html_response(connection):
-    with open("page/index.html", "r") as page:
+def send_response(connection, webpage_path, content_type):
+    with open(webpage_path, "r") as page:
         page_str = page.read()
-        http_message = HEADERS_HTML + f"Content-length: {len(page_str)}\r\n" + "\r\n" + page_str
+        header = f"HTTP/1.0 200 OK\r\nContent-Type: {content_type}; charset=utf-8\r\nConnection: close\r\n"
+        http_message = header + "\r\n" + page_str
         connection.send(http_message.encode("utf-8"))
-        print("sent")
-
-def send_css_response(connection):
-    with open("page/css/style.css", "r") as page:
-            page_str = page.read()
-            http_message = HEADERS_CSS + f"Content-length: {len(page_str)}\r\n" + "\r\n" + page_str
-            connection.send(http_message.encode("utf-8"))
-            print("sent")
+        print("sent response")
 
 def parse_data(data):
     data_split = data.split('\r\n\r\n')
@@ -78,6 +73,10 @@ def parse_data(data):
         query_parameters_dict = {k:v for k, v in (q.split("=") for q in query_parameters_split)}
 
     return method, path, headers, query_parameters_dict, body
+
+def log_post(payload, file_path):
+    with open(file_path, "a") as f:
+        f.write(payload + '\n')
 
 def server_run(host, port):
     s = open_socket(host, port)
@@ -98,9 +97,14 @@ def server_run(host, port):
 
             if method == "GET":
                 if path == "/":
-                    send_html_response(conn)
+                    send_response(conn, "page/index.html", "text/html")
                 elif path == "/css/style.css":
-                    send_css_response(conn)
+                    send_response(conn, "page/css/style.css", "text/css")
+            elif method == "POST":
+                if path == "/submit":
+                    log_post(request_body, LOG_PATH)
+                    send_response(conn, "page/success.html", "text/html")
+            
             conn.close()
 
 if __name__ == "__main__":
