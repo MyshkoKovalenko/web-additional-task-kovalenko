@@ -27,6 +27,8 @@
 
     display: flex;
     flex-direction: column;
+
+    max-width: 50%;
 }
 
 .greet-card h1 {
@@ -54,4 +56,10 @@
 
 .greet-card a {
     color: black;
+}
+
+.found-message {
+    border-left: 3px solid gray;
+    padding: 10px;
+    margin: 10px 0;
 }

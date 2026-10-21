@@ -2,11 +2,14 @@ import socket
 import sys
 import os
 
-if not os.path.exists("data/"):
-    os.mkdir("data/")
-
 USAGE = "Usage: python server.py [host] [port]"
 LOG_PATH = "data/logs.txt"
+
+if not os.path.exists("data/"):
+    os.mkdir("data/")
+if not os.path.exists("data/logs.txt"):
+    with open("data/logs.txt", "w") as f:
+        f.write("")
 
 def throw_usage_error(message):
     print(message)
@@ -56,6 +59,14 @@ def send_response(connection, webpage_path, content_type):
         connection.send(http_message.encode("utf-8"))
         print("sent response")
 
+def send_response_substitution(connection, webpage_path, sub, content_type):
+    with open(webpage_path, "r") as page:
+        page_str = page.read().format(content=sub)
+        header = f"HTTP/1.0 200 OK\r\nContent-Type: {content_type}; charset=utf-8\r\nConnection: close\r\n"
+        http_message = header + "\r\n" + page_str
+        connection.send(http_message.encode("utf-8"))
+        print("sent response")
+
 def parse_data(data):
     data_split = data.split('\r\n\r\n')
     start_headers_split = data_split[0].split('\r\n')
@@ -78,6 +89,34 @@ def log_post(payload, file_path):
     with open(file_path, "a") as f:
         f.write(payload + '\n')
 
+def url_decode(text):
+    text_without_plus = text.replace('+', ' ')
+    result = ""
+    for i in range(len(text_without_plus)):
+        if text_without_plus[i] == '%' or text_without_plus[i - 1] == '%':
+            continue
+        elif i >= 2 and text_without_plus[i - 2] == '%':
+            decoded_char = chr(int(text_without_plus[i - 1] + text_without_plus[i], 16))
+            result += decoded_char
+        else:
+            result += text_without_plus[i]
+    return result
+
+def get_messages(username):
+    result = ""
+    tag = '<div class="found-message"><p>{msg}</p></div>'
+    with open("data/logs.txt") as log:
+        for l in log:
+            l_split = l.split('&')
+            name = l_split[0].split('=')[1]
+            if name == username:
+                message = url_decode(l_split[1].split('=')[1])
+                message = message.replace('\n', '<br>')
+                result += tag.format(msg=message)
+    if len(result) == 0:
+        result = "No messages found."
+    return f"<h3>Messages by {url_decode(username)}:</h3>" + result
+
 def server_run(host, port):
     s = open_socket(host, port)
     while True:
@@ -98,6 +137,11 @@ def server_run(host, port):
             if method == "GET":
                 if path == "/":
                     send_response(conn, "page/index.html", "text/html")
+                elif path == "/search":
+                    send_response(conn, "page/search.html", "text/html")
+                elif path == "/message_search":
+                    user_messages = get_messages(query_parameters["username"])
+                    send_response_substitution(conn, "page/message_search.html", user_messages, "text/html")
                 elif path == "/css/style.css":
                     send_response(conn, "page/css/style.css", "text/css")
             elif method == "POST":

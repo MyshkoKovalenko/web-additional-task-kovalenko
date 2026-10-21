@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server webpage</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="greet-card">
+            <h1>
+                Search messages
+            </h1>
+            <form action="message_search" method="GET">
+                <input name="username" id="name-box" type="text" placeholder="Search by username" required>
+                <input type="submit">
+            </form>
+            <a href="/search">Go back to the search page</a>
+        </div>
+    </div>
+</body>
+</html>
