@@ -13,8 +13,8 @@
                 Hello from HTTP Server
             </h1>
             <form action="submit" method="POST">
-                <input name="username" id="name-box" type="text" placeholder="Your name..." required>
-                <textarea name="message" id="message-box" required></textarea>
+                <input name="username" id="name-box" type="text" placeholder="Your name..." maxlength="100" required>
+                <textarea name="message" id="message-box" maxlength="1000" required></textarea>
                 <input type="submit">
             </form>
             <a href="/search">Go to message search</a>

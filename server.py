@@ -5,6 +5,15 @@ import os
 USAGE = "Usage: python server.py [host] [port]"
 LOG_PATH = "data/logs.txt"
 
+CODE_LOOKUP = {
+    200: "OK",
+    400: "Bad request",
+    404: "Not found",
+    500: "Server error"
+}
+
+FORBIDDEN_URL_CHARS = ('\0', '\r', '\n', ':', '/', '?', '#', '&', '=')
+
 if not os.path.exists("data/"):
     os.mkdir("data/")
 if not os.path.exists("data/logs.txt"):
@@ -24,9 +33,9 @@ def check_args_length():
 
 def validate_args(host, port):
     host_split = host.split('.')
-    if not (len(host_split) == 4 and min([(o.isnumeric() and int(o) >= 0 and int(o) < 0xff) for o in host_split]) == 1):
+    if not (len(host_split) == 4 and min([(o.isnumeric() and int(o) >= 0 and int(o) <= 0xff) for o in host_split]) == 1):
         throw_usage_error("Not a valid IP.")
-    if not (port.isnumeric() and int(port) >= 0 and int(port) < 0xffff):
+    if not (port.isnumeric() and int(port) >= 0 and int(port) <= 0xffff):
         throw_usage_error("Not a valid port.")
 
 def open_socket(host, port):
@@ -61,11 +70,27 @@ def send_response(connection, webpage_path, content_type):
 
 def send_response_substitution(connection, webpage_path, sub, content_type):
     with open(webpage_path, "r") as page:
-        page_str = page.read().format(content=sub)
+        page_str = page.read().format(**sub)
         header = f"HTTP/1.0 200 OK\r\nContent-Type: {content_type}; charset=utf-8\r\nConnection: close\r\n"
         http_message = header + "\r\n" + page_str
         connection.send(http_message.encode("utf-8"))
         print("sent response")
+
+def send_response_error(connection, error_code):
+    with open("page/error.html", "r") as page:
+        page_str = page.read().format(code=error_code, error_message=CODE_LOOKUP[error_code])
+        header = f"HTTP/1.0 {error_code} {CODE_LOOKUP[error_code]}\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n"
+        http_message = header + "\r\n" + page_str
+        connection.send(http_message.encode("utf-8"))
+        print("sent response")
+
+def parse_query(query: str):
+    query_parameters_split = query.split("&")
+    try:
+        result = {k:v for k, v in (q.split("=") for q in query_parameters_split)}
+    except:
+        result = {}
+    return result
 
 def parse_data(data):
     data_split = data.split('\r\n\r\n')
@@ -80,8 +105,7 @@ def parse_data(data):
 
     query_parameters_dict = {}
     if len(uri) > 1:
-        query_parameters_split = uri[1].split("&")
-        query_parameters_dict = {k:v for k, v in (q.split("=") for q in query_parameters_split)}
+        query_parameters_dict = parse_query(uri[1])
 
     return method, path, headers, query_parameters_dict, body
 
@@ -115,41 +139,91 @@ def get_messages(username):
                 result += tag.format(msg=message)
     if len(result) == 0:
         result = "No messages found."
-    return f"<h3>Messages by {url_decode(username)}:</h3>" + result
+    return f"<h3>Messages by {url_decode(username)}:</h3>" + result   
+
+def sanitize_tags(url_text):
+    return url_text.replace("%3C", "%3C+").replace("%3c", "%3C+")
+
+def validate_url_encoding(text):
+    for c in FORBIDDEN_URL_CHARS:
+        if c in text:
+            return False
+    return True
+
+def validate_submit(post_payload: str, keys_lengths: dict):
+    post_payload_split=post_payload.split("&")
+    if len(post_payload_split) != len(keys_lengths):
+        return False
+    
+    query_dict = parse_query(post_payload)
+    
+    if len(query_dict) != len(keys_lengths):
+        return False
+
+    for k in query_dict:
+        if not k in keys_lengths:
+            return False
+        if len(query_dict[k]) == 0:
+            return False
+        if keys_lengths[k] < len(query_dict[k]):
+            return False
+        if not (validate_url_encoding(k) and validate_url_encoding(query_dict[k])):
+            return False
+
+    return True
 
 def server_run(host, port):
     s = open_socket(host, port)
     while True:
-        conn, addr = s.accept()
-        with conn:
-            print('Connected by ', addr)
-            data = conn.recv(1024).decode("utf-8")
-            print(data)
+        try:
+            conn, addr = s.accept()
+            with conn:
+                print('Connected by ', addr)
+                data = conn.recv(1024).decode("utf-8")
+                print(data)
 
-            method, path, headers, query_parameters, request_body = parse_data(data)
-            print("Parsed request:")
-            print(method)
-            print(path)
-            print(headers)
-            print(query_parameters)
-            print(request_body)
+                method, path, headers, query_parameters, request_body = parse_data(data)
+                print("Parsed request:")
+                print(method)
+                print(path)
+                print(headers)
+                print(query_parameters)
+                print(request_body)
 
-            if method == "GET":
-                if path == "/":
-                    send_response(conn, "page/index.html", "text/html")
-                elif path == "/search":
-                    send_response(conn, "page/search.html", "text/html")
-                elif path == "/message_search":
-                    user_messages = get_messages(query_parameters["username"])
-                    send_response_substitution(conn, "page/message_search.html", user_messages, "text/html")
-                elif path == "/css/style.css":
-                    send_response(conn, "page/css/style.css", "text/css")
-            elif method == "POST":
-                if path == "/submit":
-                    log_post(request_body, LOG_PATH)
-                    send_response(conn, "page/success.html", "text/html")
-            
-            conn.close()
+                if method == "GET":
+                    if path == "/":
+                        send_response(conn, "page/index.html", "text/html")
+                    elif path == "/search":
+                        send_response(conn, "page/search.html", "text/html")
+                    elif path == "/message_search":
+                        if not "username" in query_parameters:
+                            send_response_error(conn, 400)
+                        else:
+                            user_messages = get_messages(query_parameters["username"])
+                            send_response_substitution(conn, "page/message_search.html", {"content": user_messages}, "text/html")
+                    elif path == "/css/style.css":
+                        send_response(conn, "page/css/style.css", "text/css")
+                    else:
+                        send_response_error(conn, 404)
+                elif method == "POST":
+                    if path == "/submit":
+                        if not validate_submit(request_body, {"username": 100, "message": 1000}):
+                            send_response_error(conn, 400)
+                        else:
+                            sanitized = sanitize_tags(request_body)
+                            log_post(sanitized, LOG_PATH)
+                            send_response(conn, "page/success.html", "text/html")
+                    else:
+                        send_response_error(conn, 404)
+                else:
+                    send_response_error(conn, 400)
+                
+                conn.close()
+        except:
+            try:
+                send_response_error(conn, 500)
+            except:
+                pass
 
 if __name__ == "__main__":
     check_args_length()

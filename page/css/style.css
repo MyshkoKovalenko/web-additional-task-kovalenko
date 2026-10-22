@@ -46,7 +46,7 @@
 }
 
 .greet-card form textarea {
-    width: 500px;
+    width: 20vw;
     height: 300px;
     min-width: 100%;
     padding: 10px;
